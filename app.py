@@ -77,6 +77,33 @@ def format_file_size(size_bytes):
         i += 1
     return f"{size_bytes:.1f} {size_names[i]}"
 
+def check_storage_space(file_size):
+    """Check if there's enough storage space for the file"""
+    try:
+        disk_usage = shutil.disk_usage(UPLOAD_FOLDER)
+        
+        # Leave 1GB buffer space
+        required_space = file_size + (1024 * 1024 * 1024)  # 1GB buffer
+        
+        if disk_usage.free < required_space:
+            return False, f"Insufficient storage space. Need {format_file_size(required_space)}, only {format_file_size(disk_usage.free)} available"
+        
+        return True, None
+    except Exception as e:
+        return False, f"Error checking storage space: {str(e)}"
+
+def get_memory_usage():
+    """Get available memory in MB"""
+    try:
+        with open('/proc/meminfo', 'r') as f:
+            for line in f:
+                if line.startswith('MemAvailable:'):
+                    # Extract the number and convert from KB to MB
+                    mem_kb = int(line.split()[1])
+                    return mem_kb / 1024
+    except:
+        return None
+
 def generate_share_id():
     """Generate a unique share ID"""
     return str(uuid.uuid4())[:8]
