@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cloud File Storage</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <h1><i class="fas fa-cloud"></i> Cloud Storage</h1>
+                <div class="storage-info" id="storageInfo">
+                    <span class="storage-text">Loading...</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Upload Section -->
+        <section class="upload-section">
+            <div class="upload-area" id="uploadArea">
+                <div class="upload-content">
+                    <i class="fas fa-cloud-upload-alt upload-icon"></i>
+                    <h3>Drag & Drop files here</h3>
+                    <p>or <span class="browse-text">click to browse</span></p>
+                    <input type="file" id="fileInput" multiple hidden>
+                </div>
+                <div class="upload-progress" id="uploadProgress" style="display: none;">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                    <p class="progress-text" id="progressText">Uploading...</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Files Section -->
+        <section class="files-section">
+            <div class="files-header">
+                <h2><i class="fas fa-folder"></i> Your Files</h2>
+                <button class="refresh-btn" id="refreshBtn">
+                    <i class="fas fa-sync-alt"></i> Refresh
+                </button>
+            </div>
+            
+            <div class="files-container" id="filesContainer">
+                <div class="loading" id="loadingFiles">
+                    <i class="fas fa-spinner fa-spin"></i> Loading files...
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- Delete Confirmation Modal -->
+    <div class="modal" id="deleteModal">
+        <div class="modal-content">
+            <h3><i class="fas fa-exclamation-triangle"></i> Confirm Delete</h3>
+            <p>Are you sure you want to delete "<span id="deleteFileName"></span>"?</p>
+            <div class="modal-actions">
+                <button class="btn btn-secondary" id="cancelDelete">Cancel</button>
+                <button class="btn btn-danger" id="confirmDelete">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  cloud-file-uploader:
+    build: .
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./uploads:/app/uploads
+    environment:
+      - FLASK_ENV=production
+      - UPLOAD_FOLDER=uploads
+      - MAX_FILE_SIZE=3221225472
+    restart: unless-stopped
+    container_name: cloud-file-uploader
