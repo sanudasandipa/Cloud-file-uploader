@@ -34,8 +34,19 @@ A modern, responsive web application for cloud file storage built with Python Fl
 
 ### Option 1: Automated Setup (Recommended)
 
-1. **Clone/Upload the project to your Ubuntu server**
-2. **Run the automated setup**:
+1. **Clone the project to your Ubuntu server**:
+   ```bash
+   git clone <your-repo-url>
+   cd Cloud-file-uploader
+   ```
+
+2. **Set up environment configuration**:
+   ```bash
+   cp .env.example .env
+   # Edit .env if you need to customize settings
+   ```
+
+3. **Run the automated setup**:
    ```bash
    chmod +x setup-ubuntu-server.sh deploy.sh
    ./setup-ubuntu-server.sh
@@ -44,7 +55,19 @@ A modern, responsive web application for cloud file storage built with Python Fl
 
 ### Option 2: Manual Docker Setup
 
-1. **Install Docker on Ubuntu**:
+1. **Clone the project**:
+   ```bash
+   git clone <your-repo-url>
+   cd Cloud-file-uploader
+   ```
+
+2. **Set up environment configuration**:
+   ```bash
+   cp .env.example .env
+   # Edit .env if you need to customize settings
+   ```
+
+3. **Install Docker on Ubuntu**:
    ```bash
    curl -fsSL https://get.docker.com -o get-docker.sh
    sudo sh get-docker.sh
@@ -52,13 +75,13 @@ A modern, responsive web application for cloud file storage built with Python Fl
    # Log out and log back in
    ```
 
-2. **Install Docker Compose**:
+4. **Install Docker Compose**:
    ```bash
    sudo curl -L "https://github.com/docker/compose/releases/download/v2.20.0/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
    sudo chmod +x /usr/local/bin/docker-compose
    ```
 
-3. **Deploy the application**:
+5. **Deploy the application**:
    ```bash
    docker-compose up -d
    ```
@@ -89,14 +112,29 @@ Cloud-file-uploader/
 
 ## ⚙️ Configuration
 
+### Environment Setup
+
+1. **Create your environment configuration**:
+   ```bash
+   cp .env.example .env
+   ```
+
+2. **Customize your settings** (optional):
+   Edit `.env` file to adjust configuration:
+   ```bash
+   nano .env
+   ```
+
 ### Environment Variables (.env)
 ```bash
 FLASK_APP=app.py
 FLASK_ENV=development
 FLASK_DEBUG=True
-MAX_FILE_SIZE=104857600  # 100MB in bytes
+MAX_FILE_SIZE=3221225472  # 3GB in bytes (3 * 1024^3)
 UPLOAD_FOLDER=uploads
 ```
+
+> **Note**: The `.env` file is ignored by git for security. Always copy from `.env.example` when setting up a new environment.
 
 ### Server Configuration (app.py)
 - **Upload folder**: `uploads/`
