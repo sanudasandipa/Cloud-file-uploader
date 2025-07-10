@@ -25,6 +25,23 @@ class CloudStorage {
         this.deleteFileName = document.getElementById('deleteFileName');
         this.cancelDelete = document.getElementById('cancelDelete');
         this.confirmDelete = document.getElementById('confirmDelete');
+        
+        // Share modal elements
+        this.shareModal = document.getElementById('shareModal');
+        this.shareFileName = document.getElementById('shareFileName');
+        this.cancelShare = document.getElementById('cancelShare');
+        this.createShare = document.getElementById('createShare');
+        this.expiresInput = document.getElementById('expiresInput');
+        this.maxDownloadsInput = document.getElementById('maxDownloadsInput');
+        this.passwordShareInput = document.getElementById('passwordInput');
+        this.existingShares = document.getElementById('existingShares');
+        this.sharesList = document.getElementById('sharesList');
+        
+        // Share success modal elements
+        this.shareSuccessModal = document.getElementById('shareSuccessModal');
+        this.shareLinkInput = document.getElementById('shareLinkInput');
+        this.copyLinkBtn = document.getElementById('copyLinkBtn');
+        this.closeShareSuccess = document.getElementById('closeShareSuccess');
     }
 
     bindEvents() {
@@ -80,10 +97,42 @@ class CloudStorage {
             }
         });
 
+        // Share modal events
+        this.cancelShare.addEventListener('click', () => {
+            this.hideShareModal();
+        });
+
+        this.createShare.addEventListener('click', () => {
+            this.createShareLink();
+        });
+
+        this.shareModal.addEventListener('click', (e) => {
+            if (e.target === this.shareModal) {
+                this.hideShareModal();
+            }
+        });
+
+        // Share success modal events
+        this.copyLinkBtn.addEventListener('click', () => {
+            this.copyShareLink();
+        });
+
+        this.closeShareSuccess.addEventListener('click', () => {
+            this.hideShareSuccessModal();
+        });
+
+        this.shareSuccessModal.addEventListener('click', (e) => {
+            if (e.target === this.shareSuccessModal) {
+                this.hideShareSuccessModal();
+            }
+        });
+
         // Keyboard events
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
                 this.hideDeleteModal();
+                this.hideShareModal();
+                this.hideShareSuccessModal();
             }
         });
     }
@@ -186,6 +235,9 @@ class CloudStorage {
                 </a>
                 <button class="btn btn-danger" onclick="cloudStorage.showDeleteModal('${file.name}')">
                     <i class="fas fa-trash"></i> Delete
+                </button>
+                <button class="btn btn-share" onclick="cloudStorage.showShareModal('${file.name}')">
+                    <i class="fas fa-share-alt"></i> Share
                 </button>
             </div>
         `;
@@ -304,6 +356,181 @@ class CloudStorage {
         }
     }
 
+    showShareModal(filename) {
+        this.currentShareFile = filename;
+        this.shareFileName.textContent = filename;
+        
+        // Reset form
+        this.expiresInput.value = '';
+        this.maxDownloadsInput.value = '';
+        this.passwordShareInput.value = '';
+        
+        // Load existing shares
+        this.loadExistingShares(filename);
+        
+        this.shareModal.classList.add('show');
+    }
+
+    hideShareModal() {
+        this.shareModal.classList.remove('show');
+        this.currentShareFile = null;
+        this.existingShares.style.display = 'none';
+    }
+
+    async loadExistingShares(filename) {
+        try {
+            const response = await fetch(`${this.apiBase}/shares/${encodeURIComponent(filename)}`);
+            const data = await response.json();
+
+            if (data.success && data.shares.length > 0) {
+                this.renderExistingShares(data.shares);
+                this.existingShares.style.display = 'block';
+            } else {
+                this.existingShares.style.display = 'none';
+            }
+        } catch (error) {
+            console.error('Error loading existing shares:', error);
+            this.existingShares.style.display = 'none';
+        }
+    }
+
+    renderExistingShares(shares) {
+        const shareItems = shares.map(share => {
+            const createdDate = new Date(share.created_at).toLocaleString();
+            const expiresText = share.expires_at 
+                ? new Date(share.expires_at).toLocaleString()
+                : 'Never';
+            const downloadsText = share.max_downloads 
+                ? `${share.download_count}/${share.max_downloads}`
+                : `${share.download_count}/∞`;
+
+            return `
+                <div class="share-item">
+                    <div class="share-item-header">
+                        <span><strong>ID:</strong> ${share.share_id}</span>
+                        <button class="btn btn-danger btn-sm" onclick="cloudStorage.deleteShare('${share.share_id}')">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                    <div class="share-url">${share.share_url}</div>
+                    <div class="share-stats">
+                        <span><i class="fas fa-calendar"></i> Created: ${createdDate}</span>
+                        <span><i class="fas fa-clock"></i> Expires: ${expiresText}</span>
+                        <span><i class="fas fa-download"></i> Downloads: ${downloadsText}</span>
+                        ${share.has_password ? '<span><i class="fas fa-lock"></i> Password Protected</span>' : ''}
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        this.sharesList.innerHTML = shareItems;
+    }
+
+    async createShareLink() {
+        if (!this.currentShareFile) return;
+
+        const shareData = {
+            filename: this.currentShareFile
+        };
+
+        // Add optional parameters
+        if (this.expiresInput.value) {
+            shareData.expires_hours = parseInt(this.expiresInput.value);
+        }
+
+        if (this.maxDownloadsInput.value) {
+            shareData.max_downloads = parseInt(this.maxDownloadsInput.value);
+        }
+
+        if (this.passwordShareInput.value) {
+            shareData.password = this.passwordShareInput.value;
+        }
+
+        try {
+            this.createShare.disabled = true;
+            this.createShare.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating...';
+
+            const response = await fetch(`${this.apiBase}/share`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(shareData)
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                this.hideShareModal();
+                this.showShareSuccess(data.share_url);
+                this.showToast('success', data.message);
+            } else {
+                this.showToast('error', 'Failed to create share: ' + data.error);
+            }
+        } catch (error) {
+            this.showToast('error', 'Error creating share: ' + error.message);
+        } finally {
+            this.createShare.disabled = false;
+            this.createShare.innerHTML = '<i class="fas fa-share"></i> Create Link';
+        }
+    }
+
+    async deleteShare(shareId) {
+        if (!confirm('Are you sure you want to delete this share link?')) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`${this.apiBase}/share/${shareId}`, {
+                method: 'DELETE'
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                this.showToast('success', data.message);
+                // Reload existing shares
+                if (this.currentShareFile) {
+                    await this.loadExistingShares(this.currentShareFile);
+                }
+            } else {
+                this.showToast('error', 'Failed to delete share: ' + data.error);
+            }
+        } catch (error) {
+            this.showToast('error', 'Error deleting share: ' + error.message);
+        }
+    }
+
+    showShareSuccess(shareUrl) {
+        this.shareLinkInput.value = shareUrl;
+        this.shareSuccessModal.classList.add('show');
+    }
+
+    hideShareSuccessModal() {
+        this.shareSuccessModal.classList.remove('show');
+    }
+
+    async copyShareLink() {
+        try {
+            await navigator.clipboard.writeText(this.shareLinkInput.value);
+            this.showToast('success', 'Share link copied to clipboard!');
+            
+            // Update button text temporarily
+            const originalText = this.copyLinkBtn.innerHTML;
+            this.copyLinkBtn.innerHTML = '<i class="fas fa-check"></i> Copied!';
+            
+            setTimeout(() => {
+                this.copyLinkBtn.innerHTML = originalText;
+            }, 2000);
+        } catch (error) {
+            // Fallback for older browsers
+            this.shareLinkInput.select();
+            this.shareLinkInput.setSelectionRange(0, 99999);
+            document.execCommand('copy');
+            this.showToast('success', 'Share link copied to clipboard!');
+        }
+    }
+
     showToast(type, message) {
         const toast = document.createElement('div');
         toast.className = `toast ${type}`;
@@ -340,6 +567,182 @@ class CloudStorage {
                     toast.parentNode.removeChild(toast);
                 }
             }, 300);
+        }
+    }
+
+    // Share Modal Methods
+    async showShareModal(filename) {
+        this.currentShareFile = filename;
+        this.shareFileName.textContent = filename;
+        
+        // Reset form
+        this.expiresInput.value = '';
+        this.maxDownloadsInput.value = '';
+        this.passwordShareInput.value = '';
+        
+        // Load existing shares
+        await this.loadExistingShares(filename);
+        
+        this.shareModal.classList.add('show');
+    }
+
+    hideShareModal() {
+        this.shareModal.classList.remove('show');
+        this.currentShareFile = null;
+        this.existingShares.style.display = 'none';
+    }
+
+    async loadExistingShares(filename) {
+        try {
+            const response = await fetch(`${this.apiBase}/shares/${encodeURIComponent(filename)}`);
+            const data = await response.json();
+
+            if (data.success && data.shares.length > 0) {
+                this.renderExistingShares(data.shares);
+                this.existingShares.style.display = 'block';
+            } else {
+                this.existingShares.style.display = 'none';
+            }
+        } catch (error) {
+            console.error('Error loading existing shares:', error);
+            this.existingShares.style.display = 'none';
+        }
+    }
+
+    renderExistingShares(shares) {
+        const shareItems = shares.map(share => {
+            const createdDate = new Date(share.created_at).toLocaleString();
+            const expiresText = share.expires_at 
+                ? new Date(share.expires_at).toLocaleString()
+                : 'Never';
+            const downloadsText = share.max_downloads 
+                ? `${share.download_count}/${share.max_downloads}`
+                : `${share.download_count}/∞`;
+
+            return `
+                <div class="share-item">
+                    <div class="share-item-header">
+                        <span><strong>ID:</strong> ${share.share_id}</span>
+                        <button class="btn btn-danger btn-sm" onclick="cloudStorage.deleteShare('${share.share_id}')">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                    <div class="share-url">${share.share_url}</div>
+                    <div class="share-stats">
+                        <span><i class="fas fa-calendar"></i> Created: ${createdDate}</span>
+                        <span><i class="fas fa-clock"></i> Expires: ${expiresText}</span>
+                        <span><i class="fas fa-download"></i> Downloads: ${downloadsText}</span>
+                        ${share.has_password ? '<span><i class="fas fa-lock"></i> Password Protected</span>' : ''}
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        this.sharesList.innerHTML = shareItems;
+    }
+
+    async createShareLink() {
+        if (!this.currentShareFile) return;
+
+        const shareData = {
+            filename: this.currentShareFile
+        };
+
+        // Add optional parameters
+        if (this.expiresInput.value) {
+            shareData.expires_hours = parseInt(this.expiresInput.value);
+        }
+
+        if (this.maxDownloadsInput.value) {
+            shareData.max_downloads = parseInt(this.maxDownloadsInput.value);
+        }
+
+        if (this.passwordShareInput.value) {
+            shareData.password = this.passwordShareInput.value;
+        }
+
+        try {
+            this.createShare.disabled = true;
+            this.createShare.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating...';
+
+            const response = await fetch(`${this.apiBase}/share`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(shareData)
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                this.hideShareModal();
+                this.showShareSuccess(data.share_url);
+                this.showToast('success', data.message);
+            } else {
+                this.showToast('error', 'Failed to create share: ' + data.error);
+            }
+        } catch (error) {
+            this.showToast('error', 'Error creating share: ' + error.message);
+        } finally {
+            this.createShare.disabled = false;
+            this.createShare.innerHTML = '<i class="fas fa-share"></i> Create Link';
+        }
+    }
+
+    async deleteShare(shareId) {
+        if (!confirm('Are you sure you want to delete this share link?')) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`${this.apiBase}/share/${shareId}`, {
+                method: 'DELETE'
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                this.showToast('success', data.message);
+                // Reload existing shares
+                if (this.currentShareFile) {
+                    await this.loadExistingShares(this.currentShareFile);
+                }
+            } else {
+                this.showToast('error', 'Failed to delete share: ' + data.error);
+            }
+        } catch (error) {
+            this.showToast('error', 'Error deleting share: ' + error.message);
+        }
+    }
+
+    showShareSuccess(shareUrl) {
+        this.shareLinkInput.value = shareUrl;
+        this.shareSuccessModal.classList.add('show');
+    }
+
+    hideShareSuccessModal() {
+        this.shareSuccessModal.classList.remove('show');
+    }
+
+    async copyShareLink() {
+        try {
+            await navigator.clipboard.writeText(this.shareLinkInput.value);
+            this.showToast('success', 'Share link copied to clipboard!');
+            
+            // Update button text temporarily
+            const originalText = this.copyLinkBtn.innerHTML;
+            this.copyLinkBtn.innerHTML = '<i class="fas fa-check"></i> Copied!';
+            
+            setTimeout(() => {
+                this.copyLinkBtn.innerHTML = originalText;
+            }, 2000);
+        } catch (error) {
+            // Fallback for older browsers
+            this.shareLinkInput.select();
+            this.shareLinkInput.setSelectionRange(0, 99999);
+            document.execCommand('copy');
+            this.showToast('success', 'Share link copied to clipboard!');
         }
     }
 }

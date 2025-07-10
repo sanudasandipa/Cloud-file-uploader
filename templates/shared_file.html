@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shared File - {{ share.filename }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        .shared-file-container {
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 40px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        }
+        
+        .shared-file-header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .shared-file-header h1 {
+            color: #2563eb;
+            margin-bottom: 10px;
+        }
+        
+        .file-preview {
+            background: #f8fafc;
+            border-radius: 8px;
+            padding: 30px;
+            margin: 30px 0;
+            text-align: center;
+        }
+        
+        .file-icon {
+            font-size: 4rem;
+            color: #64748b;
+            margin-bottom: 20px;
+        }
+        
+        .file-name {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #1e293b;
+            margin-bottom: 10px;
+            word-break: break-all;
+        }
+        
+        .file-meta {
+            color: #64748b;
+            margin-bottom: 20px;
+        }
+        
+        .password-section {
+            margin: 30px 0;
+            padding: 20px;
+            background: #fef3c7;
+            border: 1px solid #f59e0b;
+            border-radius: 8px;
+        }
+        
+        .password-input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            margin-top: 10px;
+            font-size: 1rem;
+        }
+        
+        .download-section {
+            text-align: center;
+        }
+        
+        .download-btn {
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 8px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .download-btn:hover {
+            background: #1d4ed8;
+            transform: translateY(-2px);
+        }
+        
+        .download-btn:disabled {
+            background: #9ca3af;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .share-info {
+            background: #f1f5f9;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 30px;
+        }
+        
+        .share-info h3 {
+            margin-bottom: 15px;
+            color: #374151;
+        }
+        
+        .info-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            color: #64748b;
+        }
+        
+        .error-message, .success-message {
+            padding: 12px;
+            border-radius: 6px;
+            margin: 15px 0;
+            text-align: center;
+        }
+        
+        .error-message {
+            background: #fef2f2;
+            color: #dc2626;
+            border: 1px solid #fca5a5;
+        }
+        
+        .success-message {
+            background: #f0fdf4;
+            color: #16a34a;
+            border: 1px solid #86efac;
+        }
+    </style>
+</head>
+<body>
+    <div class="shared-file-container">
+        <div class="shared-file-header">
+            <h1><i class="fas fa-share-alt"></i> Shared File</h1>
+            <p>Someone has shared a file with you</p>
+        </div>
+        
+        <div class="file-preview">
+            <div class="file-icon">
+                {% if file_info.type.startswith('image/') %}
+                    <i class="fas fa-file-image"></i>
+                {% elif file_info.type.startswith('video/') %}
+                    <i class="fas fa-file-video"></i>
+                {% elif file_info.type.startswith('audio/') %}
+                    <i class="fas fa-file-audio"></i>
+                {% elif 'pdf' in file_info.type %}
+                    <i class="fas fa-file-pdf"></i>
+                {% else %}
+                    <i class="fas fa-file"></i>
+                {% endif %}
+            </div>
+            <div class="file-name">{{ share.filename }}</div>
+            <div class="file-meta">
+                Size: {{ file_info.size_formatted if file_info else 'Unknown' }}<br>
+                Type: {{ file_info.type if file_info else 'Unknown' }}
+            </div>
+        </div>
+        
+        {% if share.password %}
+        <div class="password-section">
+            <i class="fas fa-lock"></i> <strong>Password Required</strong>
+            <p>This file is password protected. Please enter the password to download.</p>
+            <input type="password" id="passwordInput" class="password-input" placeholder="Enter password...">
+        </div>
+        {% endif %}
+        
+        <div class="download-section">
+            <button id="downloadBtn" class="download-btn" 
+                    data-share-id="{{ share_id }}" 
+                    data-has-password="{% if share.password %}true{% else %}false{% endif %}">
+                <i class="fas fa-download"></i>
+                Download File
+            </button>
+        </div>
+        
+        <div id="messageContainer"></div>
+        
+        <div class="share-info">
+            <h3><i class="fas fa-info-circle"></i> Share Information</h3>
+            {% if share.expires_at %}
+            <div class="info-item">
+                <span>Expires:</span>
+                <span id="expiryTime">{{ share.expires_at }}</span>
+            </div>
+            {% endif %}
+            {% if share.max_downloads %}
+            <div class="info-item">
+                <span>Downloads:</span>
+                <span>{{ share.download_count }} / {{ share.max_downloads }}</span>
+            </div>
+            {% endif %}
+            <div class="info-item">
+                <span>Share ID:</span>
+                <span>{{ share_id }}</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const downloadBtn = document.getElementById('downloadBtn');
+            const passwordInput = document.getElementById('passwordInput');
+            const messageContainer = document.getElementById('messageContainer');
+            
+            // Format expiry time if present
+            const expiryElement = document.getElementById('expiryTime');
+            if (expiryElement) {
+                const expiryDate = new Date(expiryElement.textContent);
+                expiryElement.textContent = expiryDate.toLocaleString();
+            }
+            
+            downloadBtn.addEventListener('click', async function() {
+                const shareId = downloadBtn.dataset.shareId;
+                const hasPassword = downloadBtn.dataset.hasPassword === 'true';
+                
+                let requestData = {};
+                
+                if (hasPassword) {
+                    const password = passwordInput.value.trim();
+                    if (!password) {
+                        showMessage('Please enter the password', 'error');
+                        return;
+                    }
+                    requestData.password = password;
+                }
+                
+                try {
+                    downloadBtn.disabled = true;
+                    downloadBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Downloading...';
+                    
+                    const response = await fetch(`/api/share/${shareId}/download`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(requestData)
+                    });
+                    
+                    if (response.ok) {
+                        // Create download link
+                        const blob = await response.blob();
+                        const url = window.URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = '{{ share.filename }}';
+                        document.body.appendChild(a);
+                        a.click();
+                        window.URL.revokeObjectURL(url);
+                        document.body.removeChild(a);
+                        
+                        showMessage('Download started successfully!', 'success');
+                    } else {
+                        const data = await response.json();
+                        showMessage(data.error || 'Download failed', 'error');
+                    }
+                } catch (error) {
+                    showMessage('Network error. Please try again.', 'error');
+                } finally {
+                    downloadBtn.disabled = false;
+                    downloadBtn.innerHTML = '<i class="fas fa-download"></i> Download File';
+                }
+            });
+            
+            // Allow Enter key to submit password
+            if (passwordInput) {
+                passwordInput.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        downloadBtn.click();
+                    }
+                });
+            }
+            
+            function showMessage(message, type) {
+                messageContainer.innerHTML = `
+                    <div class="${type}-message">
+                        ${message}
+                    </div>
+                `;
+                
+                setTimeout(() => {
+                    messageContainer.innerHTML = '';
+                }, 5000);
+            }
+        });
+    </script>
+</body>
+</html>

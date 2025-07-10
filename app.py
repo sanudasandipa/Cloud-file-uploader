@@ -1,7 +1,9 @@
 import os
 import shutil
-from datetime import datetime
-from flask import Flask, request, jsonify, send_file, render_template
+import uuid
+import sqlite3
+from datetime import datetime, timedelta
+from flask import Flask, request, jsonify, send_file, render_template, redirect, url_for, abort
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 from werkzeug.exceptions import RequestEntityTooLarge
@@ -26,6 +28,32 @@ print(f"Server started with MAX_FILE_SIZE: {MAX_FILE_SIZE:,} bytes ({MAX_FILE_SI
 # Create upload directory if it doesn't exist
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
+# Initialize database for file sharing
+def init_database():
+    """Initialize SQLite database for file sharing"""
+    conn = sqlite3.connect('file_shares.db')
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS file_shares (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            share_id TEXT UNIQUE NOT NULL,
+            filename TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            expires_at TIMESTAMP,
+            download_count INTEGER DEFAULT 0,
+            max_downloads INTEGER,
+            password TEXT,
+            created_by TEXT DEFAULT 'anonymous'
+        )
+    ''')
+    
+    conn.commit()
+    conn.close()
+
+# Initialize database on startup
+init_database()
+
 def get_file_info(filepath):
     """Get file information including size, modified date, etc."""
     try:
@@ -49,36 +77,128 @@ def format_file_size(size_bytes):
         i += 1
     return f"{size_bytes:.1f} {size_names[i]}"
 
-def check_storage_space(file_size):
-    """Check if there's enough storage space for the upload"""
-    try:
-        disk_usage = shutil.disk_usage(UPLOAD_FOLDER)
-        free_space = disk_usage.free
-        
-        # Require at least 5GB free space after upload
-        min_free_space = 5 * 1024 * 1024 * 1024  # 5GB
-        
-        if free_space - file_size < min_free_space:
-            return False, f"Insufficient storage space. Need at least 5GB free after upload."
-        
-        return True, None
-    except Exception as e:
-        return False, f"Error checking storage: {str(e)}"
+def generate_share_id():
+    """Generate a unique share ID"""
+    return str(uuid.uuid4())[:8]
 
-def get_memory_usage():
-    """Get current memory usage (Linux only)"""
+def create_file_share(filename, expires_hours=None, max_downloads=None, password=None):
+    """Create a new file share entry in database"""
+    share_id = generate_share_id()
+    expires_at = None
+    
+    if expires_hours:
+        expires_at = datetime.now() + timedelta(hours=expires_hours)
+    
+    conn = sqlite3.connect('file_shares.db')
+    cursor = conn.cursor()
+    
     try:
-        with open('/proc/meminfo', 'r') as f:
-            meminfo = f.read()
+        cursor.execute('''
+            INSERT INTO file_shares (share_id, filename, expires_at, max_downloads, password)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (share_id, filename, expires_at, max_downloads, password))
         
-        for line in meminfo.split('\n'):
-            if 'MemAvailable:' in line:
-                available_kb = int(line.split()[1])
-                available_mb = available_kb / 1024
-                return available_mb
-        return None
-    except:
-        return None
+        conn.commit()
+        return share_id
+    except sqlite3.IntegrityError:
+        # If share_id already exists, try again
+        return create_file_share(filename, expires_hours, max_downloads, password)
+    finally:
+        conn.close()
+
+def get_file_share(share_id):
+    """Get file share information from database"""
+    conn = sqlite3.connect('file_shares.db')
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        SELECT share_id, filename, created_at, expires_at, download_count, max_downloads, password
+        FROM file_shares WHERE share_id = ?
+    ''', (share_id,))
+    
+    result = cursor.fetchone()
+    conn.close()
+    
+    if result:
+        return {
+            'share_id': result[0],
+            'filename': result[1],
+            'created_at': result[2],
+            'expires_at': result[3],
+            'download_count': result[4],
+            'max_downloads': result[5],
+            'password': result[6]
+        }
+    return None
+
+def increment_download_count(share_id):
+    """Increment download count for a share"""
+    conn = sqlite3.connect('file_shares.db')
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        UPDATE file_shares SET download_count = download_count + 1
+        WHERE share_id = ?
+    ''', (share_id,))
+    
+    conn.commit()
+    conn.close()
+
+def get_file_shares_by_filename(filename):
+    """Get all active shares for a file"""
+    conn = sqlite3.connect('file_shares.db')
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        SELECT share_id, filename, created_at, expires_at, download_count, max_downloads, password
+        FROM file_shares 
+        WHERE filename = ? AND (expires_at IS NULL OR expires_at > datetime('now'))
+        ORDER BY created_at DESC
+    ''', (filename,))
+    
+    results = cursor.fetchall()
+    conn.close()
+    
+    shares = []
+    for result in results:
+        shares.append({
+            'share_id': result[0],
+            'filename': result[1],
+            'created_at': result[2],
+            'expires_at': result[3],
+            'download_count': result[4],
+            'max_downloads': result[5],
+            'has_password': bool(result[6])
+        })
+    
+    return shares
+
+def delete_file_share(share_id):
+    """Delete a file share"""
+    conn = sqlite3.connect('file_shares.db')
+    cursor = conn.cursor()
+    
+    cursor.execute('DELETE FROM file_shares WHERE share_id = ?', (share_id,))
+    conn.commit()
+    conn.close()
+
+def is_share_valid(share_data):
+    """Check if a share is still valid"""
+    if not share_data:
+        return False, "Share not found"
+    
+    # Check expiration
+    if share_data['expires_at']:
+        expires_at = datetime.fromisoformat(share_data['expires_at'].replace('Z', '+00:00'))
+        if expires_at < datetime.now():
+            return False, "Share has expired"
+    
+    # Check download limit
+    if share_data['max_downloads']:
+        if share_data['download_count'] >= share_data['max_downloads']:
+            return False, "Download limit reached"
+    
+    return True, "Valid"
 
 @app.route('/')
 def index():
@@ -281,7 +401,171 @@ def get_storage_info():
             'error': str(e)
         }), 500
 
+@app.route('/api/share', methods=['POST'])
+def create_share():
+    """Create a shareable link for a file"""
+    try:
+        data = request.get_json()
+        filename = data.get('filename')
+        expires_hours = data.get('expires_hours')
+        max_downloads = data.get('max_downloads')
+        password = data.get('password')
+        
+        if not filename:
+            return jsonify({
+                'success': False,
+                'error': 'Filename is required'
+            }), 400
+        
+        # Check if file exists
+        filepath = os.path.join(UPLOAD_FOLDER, secure_filename(filename))
+        if not os.path.exists(filepath):
+            return jsonify({
+                'success': False,
+                'error': 'File not found'
+            }), 404
+        
+        # Create share
+        share_id = create_file_share(filename, expires_hours, max_downloads, password)
+        
+        share_url = request.host_url + f'share/{share_id}'
+        
+        return jsonify({
+            'success': True,
+            'share_id': share_id,
+            'share_url': share_url,
+            'message': 'Share link created successfully'
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/shares/<filename>', methods=['GET'])
+def get_file_shares(filename):
+    """Get all active shares for a file"""
+    try:
+        filename = secure_filename(filename)
+        shares = get_file_shares_by_filename(filename)
+        
+        # Format the shares for frontend
+        formatted_shares = []
+        for share in shares:
+            share_url = request.host_url + f'share/{share["share_id"]}'
+            formatted_share = {
+                'share_id': share['share_id'],
+                'share_url': share_url,
+                'created_at': share['created_at'],
+                'expires_at': share['expires_at'],
+                'download_count': share['download_count'],
+                'max_downloads': share['max_downloads'],
+                'has_password': share['has_password']
+            }
+            formatted_shares.append(formatted_share)
+        
+        return jsonify({
+            'success': True,
+            'shares': formatted_shares
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/share/<share_id>', methods=['DELETE'])
+def delete_share(share_id):
+    """Delete a share link"""
+    try:
+        share_data = get_file_share(share_id)
+        if not share_data:
+            return jsonify({
+                'success': False,
+                'error': 'Share not found'
+            }), 404
+        
+        delete_file_share(share_id)
+        
+        return jsonify({
+            'success': True,
+            'message': 'Share deleted successfully'
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/share/<share_id>')
+def shared_file_page(share_id):
+    """Display shared file download page"""
+    try:
+        share_data = get_file_share(share_id)
+        valid, message = is_share_valid(share_data)
+        
+        if not valid:
+            abort(404)
+        
+        file_info = get_file_info(os.path.join(UPLOAD_FOLDER, share_data['filename']))
+        if file_info:
+            file_info['size_formatted'] = format_file_size(file_info['size'])
+        
+        return render_template('shared_file.html', 
+                             share=share_data, 
+                             file_info=file_info,
+                             share_id=share_id)
+        
+    except Exception as e:
+        abort(404)
+
+@app.route('/api/share/<share_id>/download', methods=['POST'])
+def download_shared_file(share_id):
+    """Download a shared file"""
+    try:
+        share_data = get_file_share(share_id)
+        valid, message = is_share_valid(share_data)
+        
+        if not valid:
+            return jsonify({
+                'success': False,
+                'error': message
+            }), 403
+        
+        # Check password if required
+        if share_data['password']:
+            data = request.get_json() or {}
+            provided_password = data.get('password')
+            
+            if not provided_password or provided_password != share_data['password']:
+                return jsonify({
+                    'success': False,
+                    'error': 'Invalid password'
+                }), 401
+        
+        filename = share_data['filename']
+        filepath = os.path.join(UPLOAD_FOLDER, filename)
+        
+        if not os.path.exists(filepath):
+            return jsonify({
+                'success': False,
+                'error': 'File not found'
+            }), 404
+        
+        # Increment download count
+        increment_download_count(share_id)
+        
+        return send_file(filepath, as_attachment=True, download_name=filename)
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
 if __name__ == '__main__':
-    # Check if running in Docker (production mode)
-    debug_mode = os.getenv('FLASK_ENV', 'development') == 'development'
-    app.run(host='0.0.0.0', port=5000, debug=debug_mode)
+    init_database()
+    app.run(host='0.0.0.0', port=5000, debug=True)

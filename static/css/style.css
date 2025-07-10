@@ -321,6 +321,11 @@ body {
     border-color: #d0d0d0;
 }
 
+.btn-sm {
+    padding: 6px 10px;
+    font-size: 12px;
+}
+
 /* Loading States */
 .loading {
     text-align: center;
@@ -487,6 +492,142 @@ body {
     display: flex;
     gap: 15px;
     justify-content: center;
+}
+
+/* Share Modal Styles */
+.share-modal-content {
+    max-width: 500px;
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+.share-form {
+    margin: 20px 0;
+}
+
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 600;
+    color: #374151;
+}
+
+.form-group label i {
+    margin-right: 8px;
+    color: #6b7280;
+}
+
+.form-group input {
+    width: 100%;
+    padding: 12px 16px;
+    border: 2px solid #e5e7eb;
+    border-radius: 8px;
+    font-size: 14px;
+    transition: border-color 0.3s ease;
+}
+
+.form-group input:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.form-group small {
+    display: block;
+    margin-top: 4px;
+    color: #6b7280;
+    font-size: 12px;
+}
+
+.existing-shares {
+    margin-top: 30px;
+    padding-top: 20px;
+    border-top: 1px solid #e5e7eb;
+}
+
+.existing-shares h4 {
+    margin-bottom: 15px;
+    color: #374151;
+}
+
+.shares-list {
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.share-item {
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 10px;
+}
+
+.share-item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.share-url {
+    font-family: monospace;
+    font-size: 12px;
+    color: #3b82f6;
+    word-break: break-all;
+    background: white;
+    padding: 8px;
+    border-radius: 4px;
+    border: 1px solid #e5e7eb;
+}
+
+.share-stats {
+    display: flex;
+    gap: 15px;
+    margin-top: 10px;
+    font-size: 12px;
+    color: #6b7280;
+}
+
+.share-stats span {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.share-link-container {
+    display: flex;
+    gap: 10px;
+    margin: 20px 0;
+}
+
+.share-link-container input {
+    flex: 1;
+    padding: 12px 16px;
+    border: 2px solid #e5e7eb;
+    border-radius: 8px;
+    font-family: monospace;
+    font-size: 14px;
+    background: #f9fafb;
+}
+
+.share-link-container button {
+    padding: 12px 20px;
+    white-space: nowrap;
+}
+
+.btn-share {
+    background: #10b981;
+    color: white;
+    border: none;
+}
+
+.btn-share:hover {
+    background: #059669;
 }
 
 /* Responsive Design */

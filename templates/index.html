@@ -70,6 +70,70 @@
         </div>
     </div>
 
+    <!-- Share Modal -->
+    <div class="modal" id="shareModal">
+        <div class="modal-content share-modal-content">
+            <h3><i class="fas fa-share-alt"></i> Share File</h3>
+            <p>Create a shareable link for "<span id="shareFileName"></span>"</p>
+            
+            <div class="share-form">
+                <div class="form-group">
+                    <label for="expiresInput">
+                        <i class="fas fa-clock"></i> Expiration (hours)
+                    </label>
+                    <input type="number" id="expiresInput" placeholder="Leave empty for no expiration" min="1" max="8760">
+                    <small>Maximum 8760 hours (1 year)</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="maxDownloadsInput">
+                        <i class="fas fa-download"></i> Maximum Downloads
+                    </label>
+                    <input type="number" id="maxDownloadsInput" placeholder="Leave empty for unlimited" min="1" max="1000">
+                </div>
+                
+                <div class="form-group">
+                    <label for="passwordInput">
+                        <i class="fas fa-lock"></i> Password Protection
+                    </label>
+                    <input type="password" id="passwordInput" placeholder="Leave empty for no password">
+                </div>
+                
+                <div class="modal-actions">
+                    <button class="btn btn-secondary" id="cancelShare">Cancel</button>
+                    <button class="btn btn-primary" id="createShare">
+                        <i class="fas fa-share"></i> Create Link
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Existing Shares -->
+            <div class="existing-shares" id="existingShares" style="display: none;">
+                <h4><i class="fas fa-link"></i> Existing Shares</h4>
+                <div class="shares-list" id="sharesList"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Share Success Modal -->
+    <div class="modal" id="shareSuccessModal">
+        <div class="modal-content">
+            <h3><i class="fas fa-check-circle"></i> Share Link Created</h3>
+            <p>Your share link has been created successfully!</p>
+            
+            <div class="share-link-container">
+                <input type="text" id="shareLinkInput" readonly>
+                <button class="btn btn-primary" id="copyLinkBtn">
+                    <i class="fas fa-copy"></i> Copy
+                </button>
+            </div>
+            
+            <div class="modal-actions">
+                <button class="btn btn-secondary" id="closeShareSuccess">Close</button>
+            </div>
+        </div>
+    </div>
+
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 </body>
 </html>
