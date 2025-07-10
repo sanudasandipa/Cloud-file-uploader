@@ -296,6 +296,9 @@ def upload_file():
                     'error': storage_error
                 }), 507  # Insufficient Storage
             
+            # Check memory availability for upload
+            has_memory, memory_message = check_memory_for_upload(file_size)
+            
             # Secure the filename
             filename = secure_filename(file.filename)
             
@@ -308,6 +311,32 @@ def upload_file():
                 counter += 1
             
             filepath = os.path.join(UPLOAD_FOLDER, filename)
+            
+            # Use streaming upload if recommended
+            if not has_memory:
+                # Stream save the file in chunks
+                bytes_written, error = stream_save_file(file, filepath)
+                if error:
+                    return jsonify({
+                        'success': False,
+                        'error': f"Error saving file: {error}"
+                    }), 500
+                
+                file_info = get_file_info(filepath)
+                
+                return jsonify({
+                    'success': True,
+                    'message': f'File "{filename}" uploaded successfully (streaming)',
+                    'file': {
+                        'name': filename,
+                        'size': file_info['size'],
+                        'size_formatted': format_file_size(file_info['size']),
+                        'modified': file_info['modified'],
+                        'type': file_info['type']
+                    }
+                })
+            
+            # Save the file normally
             file.save(filepath)
             
             file_info = get_file_info(filepath)
@@ -592,6 +621,43 @@ def download_shared_file(share_id):
             'success': False,
             'error': str(e)
         }), 500
+
+def check_memory_for_upload(file_size):
+    """Check if we have enough memory for traditional upload, recommend streaming if not"""
+    available_memory_mb = get_memory_usage()
+    
+    if available_memory_mb is None:
+        return True, "Cannot determine memory usage"
+    
+    # Convert file size to MB
+    file_size_mb = file_size / (1024 * 1024)
+    
+    # If file is larger than 50% of available memory, recommend streaming
+    if file_size_mb > (available_memory_mb * 0.5):
+        return False, f"File too large for memory ({file_size_mb:.1f}MB), only {available_memory_mb:.1f}MB available. Use streaming upload."
+    
+    return True, None
+
+def stream_save_file(file_storage, filepath, chunk_size=8192):
+    """Save uploaded file in chunks to minimize RAM usage"""
+    bytes_written = 0
+    
+    try:
+        with open(filepath, 'wb') as f:
+            while True:
+                # Read small chunks to minimize RAM usage
+                chunk = file_storage.stream.read(chunk_size)
+                if not chunk:
+                    break
+                f.write(chunk)
+                bytes_written += len(chunk)
+        
+        return bytes_written, None
+    except Exception as e:
+        # Clean up partial file on error
+        if os.path.exists(filepath):
+            os.remove(filepath)
+        return 0, str(e)
 
 if __name__ == '__main__':
     init_database()
