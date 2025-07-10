@@ -28,6 +28,10 @@ class CloudStorage {
         this.cancelDelete = document.getElementById('cancelDelete');
         this.confirmDelete = document.getElementById('confirmDelete');
         
+        // Theme toggle elements
+        this.themeToggle = document.getElementById('themeToggle');
+        this.themeIcon = document.getElementById('themeIcon');
+        
         // Share modal elements
         this.shareModal = document.getElementById('shareModal');
         this.shareFileName = document.getElementById('shareFileName');
@@ -44,6 +48,9 @@ class CloudStorage {
         this.shareLinkInput = document.getElementById('shareLinkInput');
         this.copyLinkBtn = document.getElementById('copyLinkBtn');
         this.closeShareSuccess = document.getElementById('closeShareSuccess');
+        
+        // Initialize theme
+        this.initializeTheme();
     }
 
     bindEvents() {
@@ -137,6 +144,11 @@ class CloudStorage {
                 this.hideShareSuccessModal();
             }
         });
+
+        // Theme toggle event
+        this.themeToggle.addEventListener('click', () => {
+            this.toggleTheme();
+        });
     }
 
     async loadFiles() {
@@ -217,29 +229,34 @@ class CloudStorage {
         card.className = 'file-card';
 
         const fileIcon = this.getFileIcon(file.type);
+        const fileIconClass = this.getFileIconClass(file.type);
         const formattedDate = new Date(file.modified).toLocaleString();
+        const fileExtension = file.name.split('.').pop().toUpperCase() || 'FILE';
 
         card.innerHTML = `
-            <div class="file-info">
-                <div class="file-name">
-                    <i class="${fileIcon}"></i> ${file.name}
+            <div class="file-header">
+                <i class="${fileIcon} file-icon ${fileIconClass}"></i>
+                <div class="file-info">
+                    <div class="file-name">${file.name}</div>
+                    <div class="file-details">
+                        <div class="file-meta">
+                            <span class="file-type">${fileExtension}</span>
+                            <span class="file-size">${file.size_formatted}</span>
+                        </div>
+                        <div class="file-date">${formattedDate}</div>
+                    </div>
                 </div>
-                <div class="file-meta">
-                    <span class="file-size">${file.size_formatted}</span>
-                    <span class="file-type">${file.type || 'unknown'}</span>
-                </div>
-                <div class="file-date">${formattedDate}</div>
             </div>
             <div class="file-actions">
                 <a href="${this.apiBase}/download/${encodeURIComponent(file.name)}" 
                    class="btn btn-primary" download>
                     <i class="fas fa-download"></i> Download
                 </a>
+                <button class="btn btn-secondary" onclick="cloudStorage.showShareModal('${file.name}')">
+                    <i class="fas fa-share-alt"></i> Share
+                </button>
                 <button class="btn btn-danger" onclick="cloudStorage.showDeleteModal('${file.name}')">
                     <i class="fas fa-trash"></i> Delete
-                </button>
-                <button class="btn btn-share" onclick="cloudStorage.showShareModal('${file.name}')">
-                    <i class="fas fa-share-alt"></i> Share
                 </button>
             </div>
         `;
@@ -261,6 +278,22 @@ class CloudStorage {
         if (type.includes('text')) return 'fas fa-file-alt';
         
         return 'fas fa-file';
+    }
+
+    getFileIconClass(type) {
+        if (!type) return 'file-text';
+        
+        if (type.startsWith('image/')) return 'file-image';
+        if (type.startsWith('video/')) return 'file-video';
+        if (type.startsWith('audio/')) return 'file-audio';
+        if (type.includes('pdf')) return 'file-pdf';
+        if (type.includes('word') || type.includes('document')) return 'file-doc';
+        if (type.includes('excel') || type.includes('spreadsheet')) return 'file-doc';
+        if (type.includes('powerpoint') || type.includes('presentation')) return 'file-doc';
+        if (type.includes('zip') || type.includes('rar') || type.includes('tar')) return 'file-archive';
+        if (type.includes('text')) return 'file-text';
+        
+        return 'file-text';
     }
 
     async handleFileUpload(files) {
@@ -639,18 +672,29 @@ class CloudStorage {
         }
     }
 
-    showToast(type, message) {
+    showToast(type, message, title = null) {
         const toast = document.createElement('div');
         toast.className = `toast ${type}`;
 
         const icon = type === 'success' ? 'fas fa-check-circle' : 
                     type === 'error' ? 'fas fa-exclamation-circle' : 
+                    type === 'warning' ? 'fas fa-exclamation-triangle' :
                     'fas fa-info-circle';
 
+        const toastTitle = title || (
+            type === 'success' ? 'Success' :
+            type === 'error' ? 'Error' :
+            type === 'warning' ? 'Warning' :
+            'Info'
+        );
+
         toast.innerHTML = `
-            <i class="${icon}"></i>
-            <span class="toast-message">${message}</span>
-            <button class="toast-close">&times;</button>
+            <i class="${icon} toast-icon"></i>
+            <div class="toast-content">
+                <div class="toast-title">${toastTitle}</div>
+                <div class="toast-message">${message}</div>
+            </div>
+            <button class="toast-close" aria-label="Close">&times;</button>
         `;
 
         // Add click handler for close button
@@ -661,6 +705,11 @@ class CloudStorage {
 
         this.toastContainer.appendChild(toast);
 
+        // Show with animation
+        setTimeout(() => {
+            toast.classList.add('show');
+        }, 10);
+
         // Auto remove after 5 seconds
         setTimeout(() => {
             this.removeToast(toast);
@@ -669,6 +718,7 @@ class CloudStorage {
 
     removeToast(toast) {
         if (toast && toast.parentNode) {
+            toast.classList.remove('show');
             toast.style.animation = 'slideOut 0.3s ease forwards';
             setTimeout(() => {
                 if (toast.parentNode) {
@@ -678,180 +728,39 @@ class CloudStorage {
         }
     }
 
-    // Share Modal Methods
-    async showShareModal(filename) {
-        this.currentShareFile = filename;
-        this.shareFileName.textContent = filename;
+    // Theme management methods
+    initializeTheme() {
+        // Check for saved theme preference or default to 'light'
+        const savedTheme = localStorage.getItem('cloudStorageTheme') || 'light';
+        this.setTheme(savedTheme);
+    }
+
+    toggleTheme() {
+        const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
+        const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+        this.setTheme(newTheme);
+    }
+
+    setTheme(theme) {
+        document.documentElement.setAttribute('data-theme', theme);
+        localStorage.setItem('cloudStorageTheme', theme);
         
-        // Reset form
-        this.expiresInput.value = '';
-        this.maxDownloadsInput.value = '';
-        this.passwordShareInput.value = '';
+        // Update theme icon
+        if (this.themeIcon) {
+            if (theme === 'dark') {
+                this.themeIcon.className = 'fas fa-sun';
+                this.themeToggle.title = 'Switch to light mode';
+            } else {
+                this.themeIcon.className = 'fas fa-moon';
+                this.themeToggle.title = 'Switch to dark mode';
+            }
+        }
         
-        // Load existing shares
-        await this.loadExistingShares(filename);
-        
-        this.shareModal.classList.add('show');
-    }
-
-    hideShareModal() {
-        this.shareModal.classList.remove('show');
-        this.currentShareFile = null;
-        this.existingShares.style.display = 'none';
-    }
-
-    async loadExistingShares(filename) {
-        try {
-            const response = await fetch(`${this.apiBase}/shares/${encodeURIComponent(filename)}`);
-            const data = await response.json();
-
-            if (data.success && data.shares.length > 0) {
-                this.renderExistingShares(data.shares);
-                this.existingShares.style.display = 'block';
-            } else {
-                this.existingShares.style.display = 'none';
-            }
-        } catch (error) {
-            console.error('Error loading existing shares:', error);
-            this.existingShares.style.display = 'none';
-        }
-    }
-
-    renderExistingShares(shares) {
-        const shareItems = shares.map(share => {
-            const createdDate = new Date(share.created_at).toLocaleString();
-            const expiresText = share.expires_at 
-                ? new Date(share.expires_at).toLocaleString()
-                : 'Never';
-            const downloadsText = share.max_downloads 
-                ? `${share.download_count}/${share.max_downloads}`
-                : `${share.download_count}/∞`;
-
-            return `
-                <div class="share-item">
-                    <div class="share-item-header">
-                        <span><strong>ID:</strong> ${share.share_id}</span>
-                        <button class="btn btn-danger btn-sm" onclick="cloudStorage.deleteShare('${share.share_id}')">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    </div>
-                    <div class="share-url">${share.share_url}</div>
-                    <div class="share-stats">
-                        <span><i class="fas fa-calendar"></i> Created: ${createdDate}</span>
-                        <span><i class="fas fa-clock"></i> Expires: ${expiresText}</span>
-                        <span><i class="fas fa-download"></i> Downloads: ${downloadsText}</span>
-                        ${share.has_password ? '<span><i class="fas fa-lock"></i> Password Protected</span>' : ''}
-                    </div>
-                </div>
-            `;
-        }).join('');
-
-        this.sharesList.innerHTML = shareItems;
-    }
-
-    async createShareLink() {
-        if (!this.currentShareFile) return;
-
-        const shareData = {
-            filename: this.currentShareFile
-        };
-
-        // Add optional parameters
-        if (this.expiresInput.value) {
-            shareData.expires_hours = parseInt(this.expiresInput.value);
-        }
-
-        if (this.maxDownloadsInput.value) {
-            shareData.max_downloads = parseInt(this.maxDownloadsInput.value);
-        }
-
-        if (this.passwordShareInput.value) {
-            shareData.password = this.passwordShareInput.value;
-        }
-
-        try {
-            this.createShare.disabled = true;
-            this.createShare.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating...';
-
-            const response = await fetch(`${this.apiBase}/share`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(shareData)
-            });
-
-            const data = await response.json();
-
-            if (data.success) {
-                this.hideShareModal();
-                this.showShareSuccess(data.share_url);
-                this.showToast('success', data.message);
-            } else {
-                this.showToast('error', 'Failed to create share: ' + data.error);
-            }
-        } catch (error) {
-            this.showToast('error', 'Error creating share: ' + error.message);
-        } finally {
-            this.createShare.disabled = false;
-            this.createShare.innerHTML = '<i class="fas fa-share"></i> Create Link';
-        }
-    }
-
-    async deleteShare(shareId) {
-        if (!confirm('Are you sure you want to delete this share link?')) {
-            return;
-        }
-
-        try {
-            const response = await fetch(`${this.apiBase}/share/${shareId}`, {
-                method: 'DELETE'
-            });
-
-            const data = await response.json();
-
-            if (data.success) {
-                this.showToast('success', data.message);
-                // Reload existing shares
-                if (this.currentShareFile) {
-                    await this.loadExistingShares(this.currentShareFile);
-                }
-            } else {
-                this.showToast('error', 'Failed to delete share: ' + data.error);
-            }
-        } catch (error) {
-            this.showToast('error', 'Error deleting share: ' + error.message);
-        }
-    }
-
-    showShareSuccess(shareUrl) {
-        this.shareLinkInput.value = shareUrl;
-        this.shareSuccessModal.classList.add('show');
-    }
-
-    hideShareSuccessModal() {
-        this.shareSuccessModal.classList.remove('show');
-    }
-
-    async copyShareLink() {
-        try {
-            await navigator.clipboard.writeText(this.shareLinkInput.value);
-            this.showToast('success', 'Share link copied to clipboard!');
-            
-            // Update button text temporarily
-            const originalText = this.copyLinkBtn.innerHTML;
-            this.copyLinkBtn.innerHTML = '<i class="fas fa-check"></i> Copied!';
-            
-            setTimeout(() => {
-                this.copyLinkBtn.innerHTML = originalText;
-            }, 2000);
-        } catch (error) {
-            // Fallback for older browsers
-            this.shareLinkInput.select();
-            this.shareLinkInput.setSelectionRange(0, 99999);
-            document.execCommand('copy');
-            this.showToast('success', 'Share link copied to clipboard!');
-        }
+        // Add smooth transition effect
+        document.body.style.transition = 'background-color 0.3s ease, color 0.3s ease';
+        setTimeout(() => {
+            document.body.style.transition = '';
+        }, 300);
     }
 }
 
