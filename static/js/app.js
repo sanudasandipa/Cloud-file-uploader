@@ -3,6 +3,8 @@ class CloudStorage {
         this.apiBase = '/api';
         this.files = [];
         this.currentUploadController = null;
+        this.uploadStartTime = null;
+        this.uploadStartBytes = 0;
         
         this.initializeElements();
         this.bindEvents();
@@ -264,7 +266,8 @@ class CloudStorage {
     async handleFileUpload(files) {
         if (files.length === 0) return;
 
-        // Show upload progress
+        // Reset upload tracking and show progress
+        this.resetUploadTracking();
         this.showUploadProgress();
 
         for (let i = 0; i < files.length; i++) {
@@ -273,10 +276,18 @@ class CloudStorage {
             try {
                 await this.uploadFile(file, i + 1, files.length);
             } catch (error) {
+                if (error.message === 'Upload was cancelled') {
+                    // User cancelled, stop processing remaining files
+                    break;
+                }
                 this.showToast('error', `Failed to upload ${file.name}: ${error.message}`);
             }
         }
 
+        // Clean up
+        this.currentUploadController = null;
+        this.resetUploadTracking();
+        
         // Hide upload progress and refresh
         this.hideUploadProgress();
         this.loadFiles();
@@ -287,27 +298,90 @@ class CloudStorage {
     }
 
     async uploadFile(file, current, total) {
-        const formData = new FormData();
-        formData.append('file', file);
+        return new Promise((resolve, reject) => {
+            const formData = new FormData();
+            formData.append('file', file);
 
-        // Update progress text
-        this.progressText.textContent = `Uploading ${file.name} (${current}/${total})...`;
+            const xhr = new XMLHttpRequest();
+            
+            // Track upload progress
+            xhr.upload.addEventListener('progress', (event) => {
+                if (event.lengthComputable) {
+                    // Initialize timing on first progress event if not set
+                    if (!this.uploadStartTime) {
+                        this.uploadStartTime = Date.now();
+                        this.uploadStartBytes = 0;
+                    }
+                    
+                    // Calculate individual file progress
+                    const fileProgress = (event.loaded / event.total) * 100;
+                    
+                    // Calculate overall progress across all files
+                    const previousFiles = current - 1;
+                    const overallProgress = ((previousFiles / total) + (fileProgress / 100 / total)) * 100;
+                    
+                    // Update progress bar and text
+                    this.progressFill.style.width = `${overallProgress}%`;
+                    
+                    // Show detailed progress info
+                    const uploadedMB = (event.loaded / 1024 / 1024).toFixed(1);
+                    const totalMB = (event.total / 1024 / 1024).toFixed(1);
+                    const speed = this.calculateUploadSpeed(event.loaded);
+                    
+                    this.progressText.innerHTML = `
+                        <div class="upload-details">
+                            <div class="file-info">Uploading: ${file.name} (${current}/${total})</div>
+                            <div class="progress-info">
+                                <span>${uploadedMB}MB / ${totalMB}MB</span>
+                                <span>${fileProgress.toFixed(1)}%</span>
+                                <span>${speed}</span>
+                            </div>
+                        </div>
+                    `;
+                }
+            });
 
-        const response = await fetch(`${this.apiBase}/upload`, {
-            method: 'POST',
-            body: formData
+            // Handle upload completion
+            xhr.addEventListener('load', () => {
+                if (xhr.status === 200) {
+                    try {
+                        const data = JSON.parse(xhr.responseText);
+                        if (data.success) {
+                            this.showToast('success', data.message);
+                            
+                            // Update to show file completed
+                            const overallProgress = (current / total) * 100;
+                            this.progressFill.style.width = `${overallProgress}%`;
+                            
+                            resolve(data);
+                        } else {
+                            reject(new Error(data.error));
+                        }
+                    } catch (error) {
+                        reject(new Error('Invalid server response'));
+                    }
+                } else {
+                    reject(new Error(`Upload failed with status: ${xhr.status}`));
+                }
+            });
+
+            // Handle upload errors
+            xhr.addEventListener('error', () => {
+                reject(new Error('Network error during upload'));
+            });
+
+            // Handle upload abort
+            xhr.addEventListener('abort', () => {
+                reject(new Error('Upload was cancelled'));
+            });
+
+            // Store the xhr object for potential cancellation
+            this.currentUploadController = xhr;
+
+            // Start the upload
+            xhr.open('POST', `${this.apiBase}/upload`);
+            xhr.send(formData);
         });
-
-        const data = await response.json();
-
-        if (data.success) {
-            this.showToast('success', data.message);
-            // Update progress bar
-            const progressPercent = (current / total) * 100;
-            this.progressFill.style.width = `${progressPercent}%`;
-        } else {
-            throw new Error(data.error);
-        }
     }
 
     showUploadProgress() {
@@ -319,6 +393,40 @@ class CloudStorage {
         setTimeout(() => {
             this.uploadProgress.style.display = 'none';
         }, 500);
+    }
+
+    calculateUploadSpeed(uploadedBytes) {
+        if (!this.uploadStartTime) {
+            return '0 KB/s';
+        }
+
+        const elapsed = (Date.now() - this.uploadStartTime) / 1000; // seconds
+        if (elapsed < 0.1) return '0 KB/s'; // Avoid division by very small numbers
+        
+        const bytesPerSecond = uploadedBytes / elapsed;
+
+        if (bytesPerSecond < 1024) {
+            return `${bytesPerSecond.toFixed(0)} B/s`;
+        } else if (bytesPerSecond < 1024 * 1024) {
+            return `${(bytesPerSecond / 1024).toFixed(1)} KB/s`;
+        } else {
+            return `${(bytesPerSecond / (1024 * 1024)).toFixed(1)} MB/s`;
+        }
+    }
+
+    resetUploadTracking() {
+        this.uploadStartTime = null;
+        this.uploadStartBytes = 0;
+    }
+
+    cancelUpload() {
+        if (this.currentUploadController) {
+            this.currentUploadController.abort();
+            this.currentUploadController = null;
+            this.hideUploadProgress();
+            this.resetUploadTracking();
+            this.showToast('info', 'Upload cancelled');
+        }
     }
 
     showDeleteModal(filename) {

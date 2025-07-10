@@ -30,10 +30,15 @@
                     <input type="file" id="fileInput" multiple hidden>
                 </div>
                 <div class="upload-progress" id="uploadProgress" style="display: none;">
+                    <div class="progress-header">
+                        <div class="progress-text" id="progressText">Uploading...</div>
+                        <button class="cancel-upload-btn" id="cancelUploadBtn" onclick="cloudStorage.cancelUpload()">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
                     <div class="progress-bar">
                         <div class="progress-fill" id="progressFill"></div>
                     </div>
-                    <p class="progress-text" id="progressText">Uploading...</p>
                 </div>
             </div>
         </section>
